@@ -1,8 +1,11 @@
 use core::{mem::size_of, ptr::addr_of};
 use lazy_static::lazy_static;
+use core::arch::asm;
+
+use super::selectors::SegmentSelector;
 
 lazy_static! {
-    static ref TSS: TaskStateSegment = {
+    pub static ref TSS: TaskStateSegment = {
         let mut tss = TaskStateSegment::new();
         tss.interrupt_stack_table[0 as usize] = {
             const STACK_SIZE: u64 = 0x1000 * 5;
@@ -53,6 +56,12 @@ impl TaskStateSegment {
             reserved_2: 0,
             reserved_3: 0,
             reserved_4: 0,
+        }
+    }
+
+    pub unsafe fn load(&self, ss: SegmentSelector) {
+        unsafe {
+            asm!("ltr {0:x}", in(reg) ss.0, options(nostack, preserves_flags));
         }
     }
 }

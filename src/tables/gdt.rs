@@ -2,6 +2,8 @@ use lazy_static::lazy_static;
 use crate::tables::DescriptorTablePointer;
 use core::arch::asm;
 
+use super::{selectors::{CS, Segment, SegmentSelector}, tss::{TaskStateSegment, TSS}};
+
 const SEGMENT_LIMIT: u32 = 0xFFFFFFFF;
 const SEGMENT_BASE: u32  = 0;
 
@@ -28,7 +30,7 @@ const I86_GDT_DESC_DPL: u8 = 0x0060;			//01100000
 // set "in memory" bit
 const I86_GDT_DESC_MEMORY: u8 = 0x0080;			//10000000
 
-/**	gdt descriptor grandularity bit flags	***/
+/**	gdt descriptor granularity bit flags	***/
 
 // masks out limitHi (High 4 bits of limit)
 const I86_GDT_GRAND_LIMITHI_MASK: u8 = 0x0f;	//00001111
@@ -42,7 +44,7 @@ const I86_GDT_GRAND_32BIT: u8 = 0x40;			//01000000
 // set if 64bit. 32bit needs to be clear to use
 const I86_GDT_GRAND_64BIT: u8 = 0x20;           //00100000
 
-// 4k grandularity. default: none
+// 4k granularity. default: none
 const I86_GDT_GRAND_4K: u8 = 0x80;			    //10000000
 
 lazy_static! {
@@ -83,14 +85,21 @@ lazy_static! {
 	      I86_GDT_DESC_DPL | I86_GDT_DESC_READWRITE | I86_GDT_DESC_CODEDATA | I86_GDT_DESC_MEMORY,
 	      I86_GDT_DESC_DPL | I86_GDT_GRAND_4K | I86_GDT_GRAND_32BIT | I86_GDT_GRAND_LIMITHI_MASK 
         );
+        
+        // tss
+        gdt.set_tss(&TSS, 7);
 
         gdt
     };
 }
 
 
-pub fn set_gdt() {
+pub fn load_gdt() {
     GDT.load();
+    unsafe {
+        CS::set_reg(SegmentSelector(2));
+        TSS.load(SegmentSelector(7));
+    }
 }
 
 struct GlobalDescriptorTable(pub [GDTEntry; 8192]);
@@ -116,6 +125,12 @@ impl GlobalDescriptorTable {
             base: self.0.as_ptr() as u64,
             limit: self.limit(),
         }
+    }
+
+    // Sets 2 indexes of the gdt
+    pub fn set_tss(&mut self, tss: &'static TaskStateSegment, index: usize) {
+        self.0[index].set_tss_low(tss);
+        self.0[index + 1].set_tss_high(tss);
     }
 }
 
@@ -156,5 +171,35 @@ impl GDTEntry {
         self.granularity = ((limit >> 16) & 0x0F) as u8;
         self.granularity |= gran & 0xF0;
         self.access_byte = access_byte;
+    }
+
+    
+    pub fn set_tss_low(&mut self, tss: &'static TaskStateSegment) {
+        unsafe { self.set_tss_low_unchecked(tss); }
+    }
+
+    unsafe fn set_tss_low_unchecked(&mut self, tss: *const TaskStateSegment) {
+        use core::mem::size_of;
+
+        let ptr = tss as u64;
+        let base = (ptr & 0xFFFFFFFF) as u32;
+        let limit = (size_of::<TaskStateSegment>() - 1) as u32;
+        let access_byte = I86_GDT_DESC_MEMORY;
+        let granularity = I86_GDT_GRAND_64BIT | I86_GDT_GRAND_OS;
+
+        self.set_entry(base, limit, access_byte, granularity);
+    }
+
+    pub fn set_tss_high(&mut self, tss: &'static TaskStateSegment) {
+        unsafe { self.set_tss_high_unchecked(tss); }
+    }
+
+    unsafe fn set_tss_high_unchecked(&mut self, tss: *const TaskStateSegment) {
+        let tss = GDTEntry::from_u64(((tss as u64) >> 32) & 0xFFFFFFFF);
+        *self = tss;
+    }
+
+    pub fn from_u64(value: u64) ->Self {
+        unsafe { core::mem::transmute_copy(&value) }
     }
 }

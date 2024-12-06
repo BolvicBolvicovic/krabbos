@@ -8,15 +8,18 @@ mod vga;
 mod tables;
 
 use core::panic::PanicInfo;
-use tables::{idt::set_idt, port::Port, gdt::set_gdt};
+use tables::{idt::load_idt, port::Port, gdt::load_gdt};
 
 #[no_mangle] // That forces the compiler to keep the name of the function as it is.
 pub extern "C" fn _start() -> ! {
     // This function is the entrypoint.
     println!("Hello, World from krabbos!");
 
-    set_idt();
-    set_gdt();
+    load_gdt();
+    load_idt();
+
+    fn te() { te(); }
+    te();
 
     #[cfg(test)]
     test_main();

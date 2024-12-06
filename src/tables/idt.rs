@@ -35,7 +35,7 @@ lazy_static! {
     };
 }
 
-pub fn set_idt() {
+pub fn load_idt() {
     IDT.load();
 }
 
