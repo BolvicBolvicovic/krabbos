@@ -50,6 +50,8 @@ const I86_GDT_GRAND_4K: u8 = 0x80;			    //10000000
 lazy_static! {
     static ref GDT: GlobalDescriptorTable = {
         let mut gdt = GlobalDescriptorTable([GDTEntry::null(); 8192]);
+        // Index 0 of GDT is NULL segment
+
         // kernel Code Selector 32bits
         gdt.0[1].set_entry(SEGMENT_BASE, SEGMENT_LIMIT, 
 	    I86_GDT_DESC_READWRITE | I86_GDT_DESC_EXEC_CODE | I86_GDT_DESC_CODEDATA | I86_GDT_DESC_MEMORY,

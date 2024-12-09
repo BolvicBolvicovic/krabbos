@@ -18,8 +18,6 @@ pub extern "C" fn _start() -> ! {
     load_gdt();
     load_idt();
 
-    fn te() { te(); }
-    te();
 
     #[cfg(test)]
     test_main();

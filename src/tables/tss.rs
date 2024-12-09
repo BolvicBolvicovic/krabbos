@@ -14,6 +14,13 @@ lazy_static! {
             let stack_end = stack_start + STACK_SIZE;
             stack_end
         };
+        tss.privilege_stack_table[0 as usize] = {
+            const STACK_SIZE: u64 = 0x1000 * 5;
+            static mut STACK: [u8; STACK_SIZE as usize] = [0; STACK_SIZE as usize];
+            let stack_start = addr_of!(STACK) as u64;
+            let stack_end = stack_start + STACK_SIZE;
+            stack_end
+        };
         tss
     };
 }
