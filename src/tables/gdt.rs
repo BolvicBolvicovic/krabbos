@@ -2,7 +2,7 @@ use lazy_static::lazy_static;
 use crate::tables::DescriptorTablePointer;
 use core::arch::asm;
 
-use super::{selectors::{CS, Segment, SegmentSelector}, tss::{TaskStateSegment, TSS}};
+use super::{selectors::{Segment, SegmentSelector, CS, DS}, tss::{TaskStateSegment, TSS}};
 
 const SEGMENT_LIMIT: u32 = 0xFFFFFFFF;
 const SEGMENT_BASE: u32  = 0;
@@ -52,38 +52,38 @@ lazy_static! {
         let mut gdt = GlobalDescriptorTable([GDTEntry::null(); 8192]);
         // kernel Code Selector 32bits
         gdt.0[1].set_entry(SEGMENT_BASE, SEGMENT_LIMIT, 
-	      I86_GDT_DESC_READWRITE | I86_GDT_DESC_EXEC_CODE | I86_GDT_DESC_CODEDATA | I86_GDT_DESC_MEMORY,
-	      I86_GDT_GRAND_4K | I86_GDT_GRAND_32BIT | I86_GDT_GRAND_LIMITHI_MASK 
+	    I86_GDT_DESC_READWRITE | I86_GDT_DESC_EXEC_CODE | I86_GDT_DESC_CODEDATA | I86_GDT_DESC_MEMORY,
+	    I86_GDT_GRAND_4K | I86_GDT_GRAND_32BIT | I86_GDT_GRAND_LIMITHI_MASK 
         );
 
         // kernel Code Selector 64bits
         gdt.0[2].set_entry(SEGMENT_BASE, SEGMENT_LIMIT, 
-	      I86_GDT_DESC_READWRITE | I86_GDT_DESC_EXEC_CODE | I86_GDT_DESC_CODEDATA | I86_GDT_DESC_MEMORY,
-	      I86_GDT_GRAND_4K | I86_GDT_GRAND_64BIT | I86_GDT_GRAND_LIMITHI_MASK 
+	    I86_GDT_DESC_READWRITE | I86_GDT_DESC_EXEC_CODE | I86_GDT_DESC_CODEDATA | I86_GDT_DESC_MEMORY,
+	    I86_GDT_GRAND_4K | I86_GDT_GRAND_64BIT | I86_GDT_GRAND_LIMITHI_MASK 
         );
 
         // kernel Data Selector
         gdt.0[3].set_entry(SEGMENT_BASE, SEGMENT_LIMIT,
-	      I86_GDT_DESC_READWRITE | I86_GDT_DESC_CODEDATA | I86_GDT_DESC_MEMORY,
-	      I86_GDT_GRAND_4K | I86_GDT_GRAND_32BIT | I86_GDT_GRAND_LIMITHI_MASK 
+	    I86_GDT_DESC_READWRITE | I86_GDT_DESC_CODEDATA | I86_GDT_DESC_MEMORY,
+	    I86_GDT_GRAND_4K | I86_GDT_GRAND_32BIT | I86_GDT_GRAND_LIMITHI_MASK 
         );
 
         // user Code Selector 32bits
         gdt.0[4].set_entry(SEGMENT_BASE, SEGMENT_LIMIT,
-	      I86_GDT_DESC_DPL | I86_GDT_DESC_READWRITE | I86_GDT_DESC_EXEC_CODE | I86_GDT_DESC_CODEDATA | I86_GDT_DESC_MEMORY,
-	      I86_GDT_DESC_DPL | I86_GDT_GRAND_4K | I86_GDT_GRAND_32BIT | I86_GDT_GRAND_LIMITHI_MASK 
+	    I86_GDT_DESC_DPL | I86_GDT_DESC_READWRITE | I86_GDT_DESC_EXEC_CODE | I86_GDT_DESC_CODEDATA | I86_GDT_DESC_MEMORY,
+	    I86_GDT_GRAND_4K | I86_GDT_GRAND_32BIT | I86_GDT_GRAND_LIMITHI_MASK 
         );
 
         // user Code Selector 64bits
         gdt.0[5].set_entry(SEGMENT_BASE, SEGMENT_LIMIT,
-	      I86_GDT_DESC_DPL | I86_GDT_DESC_READWRITE | I86_GDT_DESC_EXEC_CODE | I86_GDT_DESC_CODEDATA | I86_GDT_DESC_MEMORY,
-	      I86_GDT_DESC_DPL | I86_GDT_GRAND_4K | I86_GDT_GRAND_64BIT | I86_GDT_GRAND_LIMITHI_MASK 
+	    I86_GDT_DESC_DPL | I86_GDT_DESC_READWRITE | I86_GDT_DESC_EXEC_CODE | I86_GDT_DESC_CODEDATA | I86_GDT_DESC_MEMORY,
+	    I86_GDT_GRAND_4K | I86_GDT_GRAND_64BIT | I86_GDT_GRAND_LIMITHI_MASK 
         );
 
         // kernel Data Selector
         gdt.0[6].set_entry(SEGMENT_BASE, SEGMENT_LIMIT,
-	      I86_GDT_DESC_DPL | I86_GDT_DESC_READWRITE | I86_GDT_DESC_CODEDATA | I86_GDT_DESC_MEMORY,
-	      I86_GDT_DESC_DPL | I86_GDT_GRAND_4K | I86_GDT_GRAND_32BIT | I86_GDT_GRAND_LIMITHI_MASK 
+	    I86_GDT_DESC_DPL | I86_GDT_DESC_READWRITE | I86_GDT_DESC_CODEDATA | I86_GDT_DESC_MEMORY,
+	    I86_GDT_GRAND_4K | I86_GDT_GRAND_32BIT | I86_GDT_GRAND_LIMITHI_MASK 
         );
         
         // tss
@@ -93,12 +93,12 @@ lazy_static! {
     };
 }
 
-
 pub fn load_gdt() {
     GDT.load();
     unsafe {
-        CS::set_reg(SegmentSelector(2));
-        TSS.load(SegmentSelector(7));
+        CS::set_reg(SegmentSelector::new(2, 0, 0));
+        DS::set_reg(SegmentSelector::new(3, 0, 0));
+        TSS.load(SegmentSelector::new(7, 0, 0));
     }
 }
 
@@ -184,7 +184,7 @@ impl GDTEntry {
         let ptr = tss as u64;
         let base = (ptr & 0xFFFFFFFF) as u32;
         let limit = (size_of::<TaskStateSegment>() - 1) as u32;
-        let access_byte = I86_GDT_DESC_MEMORY;
+        let access_byte = I86_GDT_DESC_MEMORY | I86_GDT_DESC_ACCESS | I86_GDT_DESC_EXEC_CODE;
         let granularity = I86_GDT_GRAND_64BIT | I86_GDT_GRAND_OS;
 
         self.set_entry(base, limit, access_byte, granularity);

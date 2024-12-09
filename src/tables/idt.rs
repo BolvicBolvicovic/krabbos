@@ -17,6 +17,7 @@ lazy_static! {
         idt.exceptions[6].set_entry(as_fn_ptr!(crate::tables::exceptions::invalid_opcode));
         idt.exceptions[7].set_entry(as_fn_ptr!(crate::tables::exceptions::coprocessor_not_available));
         idt.exceptions[8].set_entry(as_fn_ptr!(crate::tables::exceptions::double_fault));
+        unsafe { idt.exceptions[8].set_ist_index(0); }
         idt.exceptions[10].set_entry(as_fn_ptr!(crate::tables::exceptions::invalid_tss));
         idt.exceptions[11].set_entry(as_fn_ptr!(crate::tables::exceptions::segment_not_present));
         idt.exceptions[12].set_entry(as_fn_ptr!(crate::tables::exceptions::stack_segment_fault));

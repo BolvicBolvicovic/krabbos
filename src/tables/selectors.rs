@@ -4,6 +4,13 @@ use core::arch::asm;
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct SegmentSelector(pub u16);
 
+impl SegmentSelector {
+    pub fn new(index: u16, table_indicator: u16, rpl: u16) -> Self {
+        if ((table_indicator != 0 && table_indicator != 1) || rpl > 3) { panic!("Error setting TI/RPL for SegmentSelector"); }
+        SegmentSelector( (index << 3) |  table_indicator << 2 | rpl)
+    }
+}
+
 pub trait Segment {
     fn get_reg() -> SegmentSelector;
     /// Reload the segment register. Depending on the segment, this may also
