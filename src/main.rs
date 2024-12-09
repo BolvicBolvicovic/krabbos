@@ -6,8 +6,9 @@
 
 mod vga;
 mod tables;
+mod pic;
 
-use core::panic::PanicInfo;
+use core::{panic::PanicInfo, arch::asm};
 use tables::{idt::load_idt, port::Port, gdt::load_gdt};
 
 #[no_mangle] // That forces the compiler to keep the name of the function as it is.
@@ -17,6 +18,12 @@ pub extern "C" fn _start() -> ! {
 
     load_gdt();
     load_idt();
+    unsafe { 
+        pic::PICS.lock().initialize();
+
+        // Enable interrupts
+        asm!( "sti", options(preserves_flags, nostack) );
+    };
 
 
     #[cfg(test)]

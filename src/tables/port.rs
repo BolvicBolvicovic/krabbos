@@ -1,21 +1,20 @@
 use core::arch::asm;
 
 #[repr(C)]
-pub struct Port {
-    port: u16
-}
+pub struct Port(u16);
+
 
 impl Port {
-    pub fn new(p: u16) -> Self {
-        Port { port: p }
+    pub const fn new(p: u16) -> Self {
+        Self(p)
     }
 
     pub unsafe fn write<T: PortWrite>(&self, value: T) {
-        unsafe { value.write_to_port(self.port); };
+        unsafe { value.write_to_port(self.0); };
     }
 
     pub unsafe fn read<T: PortRead>(&self, value: T) -> T {
-        unsafe { value.read_from_port(self.port) }
+        unsafe { value.read_from_port(self.0) }
     }
 }
 

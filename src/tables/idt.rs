@@ -21,7 +21,7 @@ lazy_static! {
         idt.exceptions[5].set_entry(as_fn_ptr!(crate::tables::exceptions::bound_range_exceeded), None);
         idt.exceptions[6].set_entry(as_fn_ptr!(crate::tables::exceptions::invalid_opcode), None);
         idt.exceptions[7].set_entry(as_fn_ptr!(crate::tables::exceptions::coprocessor_not_available), None);
-        idt.exceptions[8].set_entry(as_fn_ptr!(crate::tables::exceptions::double_fault), Some(1));
+        idt.exceptions[8].set_entry(as_fn_ptr!(crate::tables::exceptions::double_fault), Some(IDT_ENTRY_OPTION_INTERRUPT_GATE | 1));
         idt.exceptions[10].set_entry(as_fn_ptr!(crate::tables::exceptions::invalid_tss), None);
         idt.exceptions[11].set_entry(as_fn_ptr!(crate::tables::exceptions::segment_not_present), None);
         idt.exceptions[12].set_entry(as_fn_ptr!(crate::tables::exceptions::stack_segment_fault), None);
@@ -36,6 +36,8 @@ lazy_static! {
         idt.exceptions[28].set_entry(as_fn_ptr!(crate::tables::exceptions::hv_injection_exception), None);
         idt.exceptions[29].set_entry(as_fn_ptr!(crate::tables::exceptions::vmm_communication_exception), None);
         idt.exceptions[30].set_entry(as_fn_ptr!(crate::tables::exceptions::security_exception), None);
+
+        idt.interrupts[0].set_entry(as_fn_ptr!(crate::pic::pics_handler), None);
         idt
     };
 }
@@ -113,7 +115,7 @@ impl IDTEntry {
         self.set_present(true);
 
         if let Some(o) = opt {
-            self.options |= o;
+            self.options = o;
         }
     }
 
