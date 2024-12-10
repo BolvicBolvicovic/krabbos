@@ -1,4 +1,5 @@
 #![feature(custom_test_frameworks)]
+#![feature(abi_x86_interrupt)]
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 #![no_std]
@@ -9,19 +10,20 @@ mod tables;
 mod pic;
 
 use core::{panic::PanicInfo, arch::asm};
+use pic::timer::init_pit;
 use tables::{idt::load_idt, port::Port, gdt::load_gdt};
 
 #[no_mangle] // That forces the compiler to keep the name of the function as it is.
 pub extern "C" fn _start() -> ! {
-    // This function is the entrypoint.
     println!("Hello, World from krabbos!");
 
     load_gdt();
     load_idt();
     unsafe { 
         pic::PICS.lock().initialize();
+        init_pit(50);
 
-        // Enable interrupts
+        // Sets interrupts
         asm!( "sti", options(preserves_flags, nostack) );
     };
 
@@ -29,7 +31,9 @@ pub extern "C" fn _start() -> ! {
     #[cfg(test)]
     test_main();
 
-    loop {}
+    loop {
+        unsafe { asm!("hlt", options(nomem, nostack, preserves_flags)); }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

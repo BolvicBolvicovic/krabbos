@@ -92,7 +92,7 @@ impl VGAWriter {
         for byte in bytes.bytes() {
             match byte {
                 // printable ASCII byte or newline
-                0x20..=0x7e | b'\n' => self.write_byte(byte),
+                0x20..=0x7e | b'\n' | 0x08 => self.write_byte(byte),
                 // not part of printable ASCII range
                 _ => self.write_byte(0xfe),
             }
@@ -102,6 +102,7 @@ impl VGAWriter {
     fn write_byte(&mut self, byte: u8) {
         match byte {
             b'\n' => self.new_line(),
+            0x08 => self.del_char(),
             byte => {
                 if self.column_pos + 1 == VGA_BUFFER_WIDTH {
                     self.new_line();
@@ -113,6 +114,27 @@ impl VGAWriter {
             },
         }
         self.set_cursor(self.row_pos * VGA_BUFFER_WIDTH + self.column_pos);
+    }
+
+    fn del_char(&mut self) {
+        if self.column_pos == 0 && self.row_pos > 0 {
+            self.row_pos -= 1;
+            if !self.line_empty() {
+                self.column_pos = VGA_BUFFER_WIDTH - 1;
+            }
+        } else if self.column_pos > 0 {
+            self.column_pos -= 1;
+        }
+        self.buffer.chars[self.row_pos][self.column_pos].ascii_character = 0;
+    }
+
+    fn line_empty(&self) -> bool {
+        for vga_char in self.buffer.chars[self.row_pos] {
+            if vga_char.ascii_character != b' ' && vga_char.ascii_character != 0 {
+                return false
+            }
+        }
+        true
     }
 
     fn new_line(&mut self) {
@@ -166,6 +188,19 @@ macro_rules! println {
 
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
-    use core::fmt::Write;
+    use core::{fmt::Write, arch::asm};
+    use crate::tables;
+    let int_enabled: bool = tables::read().contains(tables::RFlags::INTERRUPT_FLAG);
+
+    if int_enabled {
+        unsafe {
+            asm!("cli", options(preserves_flags, nostack));
+        }
+    }
     VGA_WRITER.lock().write_fmt(args).unwrap();
+    if int_enabled {
+        unsafe {
+            asm!("sti", options(preserves_flags, nostack));
+        }
+    }
 }

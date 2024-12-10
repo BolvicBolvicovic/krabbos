@@ -37,7 +37,8 @@ lazy_static! {
         idt.exceptions[29].set_entry(as_fn_ptr!(crate::tables::exceptions::vmm_communication_exception), None);
         idt.exceptions[30].set_entry(as_fn_ptr!(crate::tables::exceptions::security_exception), None);
 
-        idt.interrupts[0].set_entry(as_fn_ptr!(crate::pic::pics_handler), None);
+        idt.interrupts[0].set_entry(as_fn_ptr!(crate::pic::timer::pit_handler), None);
+        idt.interrupts[1].set_entry(as_fn_ptr!(crate::pic::keyboard::keyboard_handler), None);
         idt
     };
 }

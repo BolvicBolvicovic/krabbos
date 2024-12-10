@@ -1,12 +1,11 @@
+pub mod timer;
+pub mod keyboard;
+
 use spin::Mutex;
-use crate::{Port, tables::InterruptStackFrame, println};
+use crate::Port;
 
 pub static PICS: Mutex<ChainedPics> = Mutex::new(unsafe { ChainedPics::new_contiguous(32) });
 
-pub fn pics_handler(_stack_frame: InterruptStackFrame) {
-    println!(".");
-    unsafe { PICS.lock().notify_end_of_interrupt(32); }
-}
 
 /// Command sent to begin PIC initialization.
 const CMD_INIT: u8 = 0x11;
