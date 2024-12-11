@@ -189,8 +189,8 @@ macro_rules! println {
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     use core::{fmt::Write, arch::asm};
-    use crate::tables;
-    let int_enabled: bool = tables::read().contains(tables::RFlags::INTERRUPT_FLAG);
+    use crate::tables::RFlags;
+    let int_enabled: bool = RFlags::read().contains(RFlags::INTERRUPT_FLAG);
 
     if int_enabled {
         unsafe {

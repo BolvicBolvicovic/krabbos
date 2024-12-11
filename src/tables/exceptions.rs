@@ -52,8 +52,30 @@ pub extern "x86-interrupt" fn general_protection_fault(stack_frame: InterruptSta
     panic!("EXCEPTION: GPF\n{:#?}", stack_frame);
 }
 
-pub extern "x86-interrupt" fn page_fault(stack_frame: InterruptStackFrame, _errcode: u64) {
-    panic!("EXCEPTION: PAGE FAULT\n{:#?}", stack_frame);
+pub extern "x86-interrupt" fn page_fault(stack_frame: InterruptStackFrame, errcode: u64) {
+    use core::arch::asm;
+    use crate::print;
+
+    let addr: u64;
+    println!("EXCEPTION: PAGE FAULT");
+    println!("Accessed address: {}", unsafe {
+        asm!("mov {}, cr2", out(reg) addr, options(nomem, nostack, preserves_flags)) ;
+        format_args!("{:#x}", addr)
+    });
+    print!("Error code:");
+    if (errcode & 1) != 0 { print!(" Protection violation") } 
+    if (errcode & 2) != 0 { print!(" Caused by write") }
+    if (errcode & 4) != 0 { print!(" User Mode") }
+    if (errcode & 8) != 0 { print!(" Malformed table") }
+    if (errcode & 16) != 0 { print!(" Instruction fetch") }
+    if (errcode & 32) != 0 { print!(" Protection key") }
+    if (errcode & 64) != 0 { print!(" Shadow stack") }
+    println!();
+    println!("{:#?}", stack_frame);
+
+    loop {
+        unsafe { asm!("hlt", options(nomem, nostack, preserves_flags)); }
+    }
 }
 pub extern "x86-interrupt" fn x87_floating_point(stack_frame: InterruptStackFrame) {
     panic!("EXCEPTION: x87_floating_point\n{:#?}", stack_frame);
