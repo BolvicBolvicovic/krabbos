@@ -1,5 +1,6 @@
 #![feature(custom_test_frameworks)]
 #![feature(abi_x86_interrupt)]
+#![feature(const_trait_impl)]
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 #![no_std]
@@ -8,13 +9,17 @@
 mod vga;
 mod tables;
 mod pic;
+mod memory;
 
 use core::{panic::PanicInfo, arch::asm};
 use pic::timer::init_pit;
 use tables::{idt::load_idt, port::Port, gdt::load_gdt};
+use bootloader::{BootInfo, entry_point};
+use memory::paging::{active_level_4_table, PageTable};
 
-#[no_mangle] // That forces the compiler to keep the name of the function as it is.
-pub extern "C" fn _start() -> ! {
+entry_point!(kernel_main);
+
+fn kernel_main(boot_info: &'static  BootInfo) -> ! {
     println!("Hello, World from krabbos!");
 
     load_gdt();
@@ -27,6 +32,13 @@ pub extern "C" fn _start() -> ! {
         asm!( "sti", options(preserves_flags, nostack) );
     };
 
+    let phys_mem_offset = boot_info.physical_memory_offset;
+    let level4_table = unsafe { active_level_4_table(phys_mem_offset) };
+    for (i, entry) in level4_table.iter().enumerate() {
+        if !entry.is_unused() {
+            println!("L4 Entry {}: {:?}", i, entry);
+        }
+    }
 
     #[cfg(test)]
     test_main();
