@@ -10,6 +10,7 @@ use bitflags::bitflags;
 const PAGE_4KB_SIZE: u64 = 0x1000;
 const PAGE_2MB_SIZE: u64 = 0x200000;
 const PAGE_1GB_SIZE: u64 = 0x40000000;
+const ADDRESS_SPACE_SIZE: u64 = 0x1_0000_0000_0000;
 
 fn read_cr3() -> u64 {
     use core::arch::asm;
@@ -68,6 +69,10 @@ pub trait VirtAddr {
     fn p3_index(self) -> PageTableIndex;
     fn p2_index(self) -> PageTableIndex;
     fn p1_index(self) -> PageTableIndex;
+    fn page_table_index(self, level: PageTableLevel) -> PageTableIndex;
+    fn new_virt_truncate(addr: u64) -> u64;
+    fn forward_checked_u64(start: Self, count: u64) -> Option<Self> where Self: Sized;
+    fn forward_checked_impl(start: Self, count: usize) -> Option<Self> where Self: Sized;
 }
 
 impl VirtAddr for u64 {
@@ -96,7 +101,52 @@ impl VirtAddr for u64 {
     #[inline]
     fn p4_index(self) -> PageTableIndex {
         PageTableIndex::new_truncate((self >> 12 >> 9 >> 9 >> 9) as u16)
-    }}
+    }
+    #[inline]
+    fn new_virt_truncate(addr: u64) -> u64 {
+        // By doing the right shift as a signed operation (on a i64), it will
+        // sign extend the value, repeating the leftmost bit.
+        ((addr << 16) as i64 >> 16) as u64
+    }
+
+    fn page_table_index(self, level: PageTableLevel) -> PageTableIndex {
+        match level {
+            PageTableLevel::One => self.p1_index(),
+            PageTableLevel::Two => self.p2_index(),
+            PageTableLevel::Three => self.p3_index(),
+            PageTableLevel::Four => self.p4_index(),
+        } 
+    }
+
+    #[inline]
+    fn forward_checked_impl(start: Self, count: usize) -> Option<Self> {
+        Self::forward_checked_u64(start, u64::try_from(count).ok()?)
+    }
+
+    /// An implementation of forward_checked that takes u64 instead of usize.
+    #[inline]
+    fn forward_checked_u64(start: Self, count: u64) -> Option<Self> {
+        if count > ADDRESS_SPACE_SIZE {
+            return None;
+        }
+
+        let mut addr = start.checked_add(count)?;
+
+        match addr & 0xFFFF800000000000 {
+            0x1 => {
+                // Jump the gap by sign extending the 47th bit.
+                addr |= 0x1ffff00000000000;
+            }
+            0x2 => {
+                // Address overflow
+                return None;
+            }
+            _ => {}
+        }
+
+        Some(addr)
+    }
+}
 
 pub trait PhysAddr {
     fn is_aligned(&self, value: u64) -> bool;
@@ -621,7 +671,7 @@ impl<S: PageSize> Page<S> {
     /// Returns an error if the address is not correctly aligned (i.e. is not a valid page start).
     #[inline]
     pub fn from_start_address(address: u64) -> Result<Self, AddressNotAligned> {
-        if !address.is_aligned_u64(S::SIZE) {
+        if !address.is_aligned(S::SIZE) {
             return Err(AddressNotAligned);
         }
         Ok(Page::containing_address(address))
@@ -710,7 +760,7 @@ impl Page<Size1GiB> {
         let mut addr = 0;
         addr |= p4_index.into_u64() << 39;
         addr |= p3_index.into_u64() << 30;
-        Page::containing_address(VirtAddr::new_truncate(addr))
+        Page::containing_address(u64::new_virt_truncate(addr))
     }
 }
 
@@ -726,7 +776,7 @@ impl Page<Size2MiB> {
         addr |= p4_index.into_u64() << 39;
         addr |= p3_index.into_u64() << 30;
         addr |= p2_index.into_u64() << 21;
-        Page::containing_address(VirtAddr::new_truncate(addr))
+        Page::containing_address(u64::new_virt_truncate(addr))
     }
 }
 
@@ -744,12 +794,12 @@ impl Page<Size4KiB> {
         addr |= p3_index.into_u64() << 30;
         addr |= p2_index.into_u64() << 21;
         addr |= p1_index.into_u64() << 12;
-        Page::containing_address(VirtAddr::new_truncate(addr))
+        Page::containing_address(u64::new_virt_truncate(addr))
     }
 
     /// Returns the level 1 page table index of this page.
     #[inline]
-    pub const fn p1_index(self) -> PageTableIndex {
+    pub fn p1_index(self) -> PageTableIndex {
         self.start_address.p1_index()
     }
 }
@@ -759,7 +809,7 @@ impl<S: PageSize> fmt::Debug for Page<S> {
         f.write_fmt(format_args!(
             "Page[{}]({:#x})",
             S::DEBUG_STR,
-            self.start_address().as_u64()
+            self.start_address()
         ))
     }
 }
@@ -916,7 +966,7 @@ impl<S: PageSize> Iterator for PageRangeInclusive<S> {
             // If the end of the inclusive range is the maximum page possible for size S,
             // incrementing start until it is greater than the end will cause an integer overflow.
             // So instead, in that case we decrement end rather than incrementing start.
-            let max_page_addr = VirtAddr::new(u64::MAX) - (S::SIZE - 1);
+            let max_page_addr = u64::MAX - (S::SIZE - 1);
             if self.start.start_address() < max_page_addr {
                 self.start += 1;
             } else {
@@ -962,7 +1012,7 @@ impl<S: PageSize> PhysFrame<S> {
     /// Returns an error if the address is not correctly aligned (i.e. is not a valid frame start).
     #[inline]
     pub fn from_start_address(address: u64) -> Result<Self, AddressNotAligned> {
-        if !address.is_aligned_u64(S::SIZE) {
+        if !address.is_aligned(S::SIZE) {
             return Err(AddressNotAligned);
         }
 
@@ -987,7 +1037,7 @@ impl<S: PageSize> PhysFrame<S> {
     #[inline]
     pub fn containing_address(address: u64) -> Self {
         PhysFrame {
-            start_address: address.align_down_u64(S::SIZE),
+            start_address: address.align_down(S::SIZE),
             size: PhantomData,
         }
     }
@@ -1022,7 +1072,7 @@ impl<S: PageSize> fmt::Debug for PhysFrame<S> {
         f.write_fmt(format_args!(
             "PhysFrame[{}]({:#x})",
             S::DEBUG_STR,
-            self.start_address().as_u64()
+            self.start_address()
         ))
     }
 }

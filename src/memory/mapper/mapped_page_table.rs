@@ -144,7 +144,7 @@ impl<'a, P: PageTableFrameMapping> MappedPageTable<'a, P> {
         if !p1[page.p1_index()].is_unused() {
             return Err(MapToError::PageAlreadyMapped(frame));
         }
-        p1[page.p1_index()].set_frame(frame, flags);
+        p1[page.p1_index()].set_frame(frame.start_address, flags);
 
         Ok(MapperFlush::new(page))
     }
@@ -425,7 +425,7 @@ impl<P: PageTableFrameMapping> Mapper<Size4KiB> for MappedPageTable<'_, P> {
         })?;
 
         p1_entry.set_unused();
-        Ok((frame, MapperFlush::new(page)))
+        Ok((unsafe {PhysFrame::from_start_address_unchecked(frame)} , MapperFlush::new(page)))
     }
 
     unsafe fn update_flags(
@@ -664,7 +664,7 @@ impl<P: PageTableFrameMapping> CleanUp for MappedPageTable<'_, P> {
                                 Page::range_inclusive(start, end),
                                 frame_deallocator,
                             ) {
-                                let frame = entry.frame().unwrap();
+                                let frame = PhysFrame::from_start_address(entry.frame().unwrap()).unwrap();
                                 entry.set_unused();
                                 frame_deallocator.deallocate_frame(frame);
                             }
@@ -711,9 +711,14 @@ impl<P: PageTableFrameMapping> PageTableWalker<P> {
         &self,
         entry: &'b PageTableEntry,
     ) -> Result<&'b PageTable, PageTableWalkError> {
+        let frame = if let Ok(f) = entry.frame() {
+            Ok( unsafe { PhysFrame::from_start_address_unchecked(f) })
+        } else {
+            Err(PageTableWalkError::MappedToHugePage)
+        };
         let page_table_ptr = self
             .page_table_frame_mapping
-            .frame_to_pointer(entry.frame()?);
+            .frame_to_pointer(frame?);
         let page_table: &PageTable = unsafe { &*page_table_ptr };
 
         Ok(page_table)
@@ -729,9 +734,14 @@ impl<P: PageTableFrameMapping> PageTableWalker<P> {
         &self,
         entry: &'b mut PageTableEntry,
     ) -> Result<&'b mut PageTable, PageTableWalkError> {
+        let frame = if let Ok(f) = entry.frame() {
+            Ok( unsafe { PhysFrame::from_start_address_unchecked(f) })
+        } else {
+            Err(PageTableWalkError::MappedToHugePage)
+        };
         let page_table_ptr = self
             .page_table_frame_mapping
-            .frame_to_pointer(entry.frame()?);
+            .frame_to_pointer(frame?);
         let page_table: &mut PageTable = unsafe { &mut *page_table_ptr };
 
         Ok(page_table)
@@ -759,7 +769,7 @@ impl<P: PageTableFrameMapping> PageTableWalker<P> {
 
         if entry.is_unused() {
             if let Some(frame) = allocator.allocate_frame() {
-                entry.set_frame(frame, insert_flags);
+                entry.set_frame(frame.start_address, insert_flags);
                 created = true;
             } else {
                 return Err(PageTableCreateError::FrameAllocationFailed);

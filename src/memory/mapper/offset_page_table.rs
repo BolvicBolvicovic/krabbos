@@ -58,8 +58,8 @@ struct PhysOffset {
 
 unsafe impl PageTableFrameMapping for PhysOffset {
     fn frame_to_pointer(&self, frame: PhysFrame) -> *mut PageTable {
-        let virt = self.offset + frame.start_address().as_u64();
-        virt.as_mut_ptr()
+        let virt = self.offset + frame.start_address();
+        virt as *mut PageTable
     }
 }
 

@@ -371,7 +371,7 @@ pub trait Mapper<S: PageSize> {
         S: PageSize,
         Self: Mapper<S>,
     {
-        let page = Page::containing_address(VirtAddr::new(frame.start_address().as_u64()));
+        let page = Page::containing_address(frame.start_address());
         unsafe { self.map_to(page, frame, flags, frame_allocator) }
     }
 }
